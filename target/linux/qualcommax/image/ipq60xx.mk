@@ -232,12 +232,13 @@ TARGET_DEVICES += yuncore_fap650
 
 define Device/jdcloud_re-ss-01
 	$(call Device/FitImage)
-	$(call Device/UbiFit)
+	$(call Device/EmmcImage)
 	DEVICE_VENDOR := JD Cloud
 	DEVICE_MODEL := RE-SS-01
-	BLOCKSIZE := 128k
-	PAGESIZE := 2048
-	SOC := ipq6018
+	KERNEL_SIZE := 6144k
+	SOC := ipq6000
+	DEVICE_DTS_CONFIG := config@cp03-c2
 	DEVICE_PACKAGES := ipq-wifi-jdcloud_re-ss-01
+	IMAGE/factory.bin := append-kernel | pad-to $$(KERNEL_SIZE) | append-rootfs | append-metadata
 endef
 TARGET_DEVICES += jdcloud_re-ss-01
