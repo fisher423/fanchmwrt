@@ -229,3 +229,15 @@ define Device/yuncore_fap650
 	IMAGE/factory.ubin := append-ubi | qsdk-ipq-factory-nand
 endef
 TARGET_DEVICES += yuncore_fap650
+
+define Device/jdcloud_re-ss-01
+	$(call Device/FitImage)
+	$(call Device/UbiFit)
+	DEVICE_VENDOR := JD Cloud
+	DEVICE_MODEL := RE-SS-01
+	BLOCKSIZE := 128k
+	PAGESIZE := 2048
+	SOC := ipq6018
+	DEVICE_PACKAGES := ipq-wifi-jdcloud_re-ss-01
+endef
+TARGET_DEVICES += jdcloud_re-ss-01
