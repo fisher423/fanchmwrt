@@ -16,7 +16,7 @@ PKG_HASH:=fed5cd22f00f30cc4c2e5329f94e2b8a901df9fa45ee255cb70e2b0b42344477
 
 include $(INCLUDE_DIR)/host-build.mk
 
-DECOMPRESS_CMD:=$(STAGING_DIR_HOST)/bin/gzip -dc $(DL_DIR)/$(PKG_SOURCE) |
+DECOMPRESS_CMD:=gzip -dc $(DL_DIR)/$(PKG_SOURCE) |
 
 define Host/Compile
 	$(HOSTCC_NOCACHE) $(HOST_CFLAGS) $(HOST_LDFLAGS) \
