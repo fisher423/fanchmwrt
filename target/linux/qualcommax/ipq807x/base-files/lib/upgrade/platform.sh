@@ -1,39 +1,8 @@
 PART_NAME=firmware
 REQUIRE_IMAGE_METADATA=1
 
-RAMFS_COPY_BIN='fw_printenv fw_setenv head'
+RAMFS_COPY_BIN='fw_printenv fw_setenv head seq'
 RAMFS_COPY_DATA='/etc/fw_env.config /var/lock/fw_printenv.lock'
-
-xiaomi_initramfs_prepare() {
-	# Wipe UBI if running initramfs
-	[ "$(rootfs_type)" = "tmpfs" ] || return 0
-
-	local rootfs_mtdnum="$( find_mtd_index rootfs )"
-	if [ ! "$rootfs_mtdnum" ]; then
-		echo "unable to find mtd partition rootfs"
-		return 1
-	fi
-
-	local kern_mtdnum="$( find_mtd_index ubi_kernel )"
-	if [ ! "$kern_mtdnum" ]; then
-		echo "unable to find mtd partition ubi_kernel"
-		return 1
-	fi
-
-	ubidetach -m "$rootfs_mtdnum"
-	ubiformat /dev/mtd$rootfs_mtdnum -y
-
-	ubidetach -m "$kern_mtdnum"
-	ubiformat /dev/mtd$kern_mtdnum -y
-}
-
-asus_initial_setup() {
-	# Remove existing linux and jffs2 volumes
-	[ "$(rootfs_type)" = "tmpfs" ] || return 0
-
-	ubirmvol /dev/ubi0 -N linux
-	ubirmvol /dev/ubi0 -N jffs2
-}
 
 remove_oem_ubi_volume() {
 	local oem_volume_name="$1"
@@ -58,94 +27,6 @@ remove_oem_ubi_volume() {
 	fi
 }
 
-tplink_get_boot_part() {
-	local cur_boot_part
-	local args
-
-	# Try to find rootfs from kernel arguments
-	read -r args < /proc/cmdline
-	for arg in $args; do
-		local ubi_mtd_arg=${arg#ubi.mtd=}
-		case "$ubi_mtd_arg" in
-		rootfs|rootfs_1)
-			echo "$ubi_mtd_arg"
-			return
-		;;
-		esac
-	done
-
-	# Fallback to u-boot env (e.g. when running initramfs)
-	cur_boot_part="$(/usr/sbin/fw_printenv -n tp_boot_idx)"
-	case $cur_boot_part in
-	1)
-		echo rootfs_1
-		;;
-	0|*)
-		echo rootfs
-		;;
-	esac
-}
-
-tplink_do_upgrade() {
-	local new_boot_part
-
-	case $(tplink_get_boot_part) in
-	rootfs)
-		CI_UBIPART="rootfs_1"
-		new_boot_part=1
-	;;
-	rootfs_1)
-		CI_UBIPART="rootfs"
-		new_boot_part=0
-	;;
-	esac
-
-	fw_setenv -s - <<-EOF
-		tp_boot_idx $new_boot_part
-	EOF
-
-	remove_oem_ubi_volume ubi_rootfs
-	nand_do_upgrade "$1"
-}
-
-linksys_mx_pre_upgrade() {
-	local setenv_script="/tmp/fw_env_upgrade"
-
-	CI_UBIPART="rootfs"
-	boot_part="$(fw_printenv -n boot_part)"
-	if [ -n "$UPGRADE_OPT_USE_CURR_PART" ]; then
-		if [ "$boot_part" -eq "2" ]; then
-			CI_KERNPART="alt_kernel"
-			CI_UBIPART="alt_rootfs"
-		fi
-	else
-		if [ "$boot_part" -eq "1" ]; then
-			echo "boot_part 2" >> $setenv_script
-			CI_KERNPART="alt_kernel"
-			CI_UBIPART="alt_rootfs"
-		else
-			echo "boot_part 1" >> $setenv_script
-		fi
-	fi
-
-	boot_part_ready="$(fw_printenv -n boot_part_ready)"
-	if [ "$boot_part_ready" -ne "3" ]; then
-		echo "boot_part_ready 3" >> $setenv_script
-	fi
-
-	auto_recovery="$(fw_printenv -n auto_recovery)"
-	if [ "$auto_recovery" != "yes" ]; then
-		echo "auto_recovery yes" >> $setenv_script
-	fi
-
-	if [ -f "$setenv_script" ]; then
-		fw_setenv -s $setenv_script || {
-			echo "failed to update U-Boot environment"
-			return 1
-		}
-	fi
-}
-
 platform_check_image() {
 	return 0;
 }
@@ -165,13 +46,13 @@ platform_pre_upgrade() {
 
 platform_do_upgrade() {
 	case "$(board_name)" in
-	aliyun,ap8220)
-		active="$(fw_printenv -n active)"
-		if [ "$active" -eq "1" ]; then
-			CI_UBIPART="rootfs1"
-		else
-			CI_UBIPART="rootfs2"
-		fi
+	arista,c260|\
+	arista,c360)
+		arista_ap_do_upgrade "$1"
+		;;
+	aliyun,ap8220|\
+	zte,mf269-stock)
+		CI_UBIPART="rootfs"
 		nand_do_upgrade "$1"
 		;;
 	arcadyan,aw1000|\
@@ -180,11 +61,14 @@ platform_do_upgrade() {
 	dynalink,dl-wrx36|\
 	edimax,cax1800|\
 	netgear,rax120v2|\
+	netgear,rbr750|\
+	netgear,rbs750|\
 	netgear,sxr80|\
 	netgear,sxs80|\
 	netgear,wax218|\
 	netgear,wax620|\
 	netgear,wax630|\
+	zyxel,nwa110ax|\
 	zyxel,nwa210ax)
 		nand_do_upgrade "$1"
 		;;
@@ -197,6 +81,7 @@ platform_do_upgrade() {
 	buffalo,wxr-5950ax12)
 		CI_KERN_UBIPART="rootfs"
 		CI_ROOT_UBIPART="user_property"
+		CI_DATA_UBIPART="user_property"
 		buffalo_upgrade_prepare
 		nand_do_flash_file "$1" || nand_do_upgrade_failed
 		nand_do_restore_config || nand_do_upgrade_failed
@@ -222,13 +107,13 @@ platform_do_upgrade() {
 	linksys,mx4200v1|\
 	linksys,mx4200v2|\
 	linksys,mx4300)
-		linksys_mx_pre_upgrade "$1"
+		linksys_pre_upgrade "$1"
 		remove_oem_ubi_volume squashfs
 		nand_do_upgrade "$1"
 		;;
 	linksys,mx5300|\
 	linksys,mx8500)
-		linksys_mx_pre_upgrade "$1"
+		linksys_pre_upgrade "$1"
 		remove_oem_ubi_volume ubifs
 		nand_do_upgrade "$1"
 		;;
@@ -255,6 +140,35 @@ platform_do_upgrade() {
 		# Kernel and rootfs are placed in 2 different UBI
 		CI_KERN_UBIPART="ubi_kernel"
 		CI_ROOT_UBIPART="rootfs"
+		CI_DATA_UBIPART="rootfs"
+		nand_do_upgrade "$1"
+		;;
+	redmi,ax6-stock|\
+	xiaomi,ax3600-stock|\
+	xiaomi,ax9000-stock)
+		part_num="$(fw_printenv -n flag_boot_rootfs)"
+		if [ "$part_num" -eq "1" ]; then
+			CI_UBIPART="rootfs_1"
+			target_num=1
+			# Reset fail flag for the current partition
+			# With both partition set to fail, the partition 2 (bit 1)
+			# is loaded
+			fw_setenv flag_try_sys2_failed 0
+		else
+			CI_UBIPART="rootfs"
+			target_num=0
+			# Reset fail flag for the current partition
+			# or uboot will skip the loading of this partition
+			fw_setenv flag_try_sys1_failed 0
+		fi
+
+		# Tell uboot to switch partition
+		fw_setenv flag_boot_rootfs "$target_num"
+		fw_setenv flag_last_success "$target_num"
+
+		# Reset success flag
+		fw_setenv flag_boot_success 0
+
 		nand_do_upgrade "$1"
 		;;
 	spectrum,sax1v1k)
@@ -263,9 +177,14 @@ platform_do_upgrade() {
 		CI_DATAPART="rootfs_data"
 		emmc_do_upgrade "$1"
 		;;
+	tcl,linkhub-hh500v)
+		tcl_upgrade_prepare
+		nand_do_upgrade "$1"
+		;;
 	tplink,deco-x80-5g|\
-	tplink,eap620hd-v1|\
-	tplink,eap660hd-v1)
+	tplink,eap620-hd-v1|\
+	tplink,eap660-hd-v1)
+		remove_oem_ubi_volume ubi_rootfs
 		tplink_do_upgrade "$1"
 		;;
 	yuncore,ax880)
@@ -295,6 +214,7 @@ platform_do_upgrade() {
 	zte,mf269)
 		CI_KERN_UBIPART="ubi_kernel"
 		CI_ROOT_UBIPART="rootfs"
+		CI_DATA_UBIPART="rootfs"
 		nand_do_upgrade "$1"
 		;;
 	zyxel,nbg7815)
@@ -310,6 +230,21 @@ platform_do_upgrade() {
 		fi
 		emmc_do_upgrade "$1"
 		;;
+	verizon,cr1000a)
+		CI_KERNPART="0:HLOS"
+		CI_ROOTPART="rootfs"
+		rootpart=$(find_mmc_part "$CI_ROOTPART")
+		mmcblk_hlos=$(find_mmc_part "$CI_KERNPART" | sed -e "s/^\/dev\///")
+		hlos_start=$(cat /sys/class/block/$mmcblk_hlos/start)
+		hlos_size=$(cat /sys/class/block/$mmcblk_hlos/size)
+		hlos_start_hex=$(printf "%X\n" "$hlos_start")
+		hlos_size_hex=$(printf "%X\n" "$hlos_size")
+		fw_setenv set_custom_bootargs "setenv bootargs console=ttyMSM0,115200n8 root=$rootpart rootwait fstools_ignore_partname=1"
+		fw_setenv read_hlos_emmc "mmc read 44000000 0x$hlos_start_hex 0x$hlos_size_hex"
+		fw_setenv setup_and_boot "run set_custom_bootargs;run read_hlos_emmc; bootm 44000000"
+		fw_setenv bootcmd "run setup_and_boot"
+		emmc_do_upgrade "$1"
+		;;
 	*)
 		default_do_upgrade "$1"
 		;;
@@ -321,7 +256,8 @@ platform_copy_config() {
 	prpl,haze|\
 	qnap,301w|\
 	spectrum,sax1v1k|\
-	zyxel,nbg7815)
+	zyxel,nbg7815|\
+	verizon,cr1000a)
 		emmc_copy_config
 		;;
 	esac
