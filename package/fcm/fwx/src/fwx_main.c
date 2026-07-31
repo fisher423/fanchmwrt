@@ -2593,7 +2593,11 @@ void init_fwx_timer(void)
 
 void fini_fwx_timer(void)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
+	timer_delete_sync(&fwx_timer);
+#else
 	del_timer_sync(&fwx_timer);
+#endif
 	AF_INFO("del fwx timer...ok");
 }
 
