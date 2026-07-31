@@ -12,6 +12,8 @@ PKG_SOURCE_VERSION:=04923c51039e8ca270c6f1dde3f04f3b36958089
 PKG_MAINTAINER:=Hans Dedecker <dedeckeh@gmail.com>
 PKG_LICENSE:=GPL-2.0
 
+PKG_EXTMOD_SUBDIRS:=nat46/modules
+
 include $(INCLUDE_DIR)/package.mk
 
 define KernelPackage/nat46
@@ -23,10 +25,8 @@ define KernelPackage/nat46
   AUTOLOAD:=$(call AutoLoad,33,nat46)
 endef
 
-include $(INCLUDE_DIR)/kernel-defaults.mk
-
 define Build/Compile
-	$(KERNEL_MAKE) M="$(PKG_BUILD_DIR)/nat46/modules" \
+	+$(KERNEL_MAKE) M="$(PKG_BUILD_DIR)/nat46/modules" \
 		MODFLAGS="-DMODULE -mlong-calls" \
 		EXTRA_CFLAGS="-DNAT46_VERSION=\\\"$(PKG_SOURCE_VERSION)\\\"" \
 		modules

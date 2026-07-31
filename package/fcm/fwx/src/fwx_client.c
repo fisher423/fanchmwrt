@@ -818,7 +818,7 @@ static struct nf_hook_ops af_client_ops[] = {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
 static void client_timer_handler(struct timer_list *t)
 {
-    af_client_info_t *client = from_timer(client, t, client_timer);
+    af_client_info_t *client = container_of(t, af_client_info_t, client_timer);
 #else
 static void client_timer_handler(unsigned long data)
 {
