@@ -30,8 +30,7 @@ define Package/firewall
   SECTION:=net
   CATEGORY:=Base system
   TITLE:=OpenWrt C Firewall
-  DEPENDS:=+libubox +libubus +libuci +libip4tc +IPV6:libip6tc +libiptext +IPV6:libiptext6 \
-	+libxtables +kmod-ipt-core +kmod-ipt-conntrack +kmod-ipt-nat +iptables-mod-fullconenat
+  DEPENDS:=+libubox +libubus +libuci +libip4tc +IPV6:libip6tc +libiptext +IPV6:libiptext6 +libxtables +kmod-ipt-core +kmod-ipt-conntrack +kmod-ipt-nat
   PROVIDES:=uci-firewall
   CONFLICTS:=firewall4
 endef

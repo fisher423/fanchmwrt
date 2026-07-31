@@ -18,6 +18,7 @@
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/list.h>
+#include <linux/timer.h>
 #include <linux/netfilter_ipv6.h>
 #include <linux/ipv6.h>
 #include <linux/in6.h>
@@ -863,7 +864,11 @@ static void client_timer_handler(unsigned long data)
         return;
     }
     
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
+    timer_delete_sync(&client->client_timer);
+#else
     del_timer_sync(&client->client_timer);
+#endif
 }
 
 
